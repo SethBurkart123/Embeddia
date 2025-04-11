@@ -1,3 +1,5 @@
+import FastPriorityQueue from 'fastpriorityqueue';
+
 const DEFAULT_TOP_K = 3;
 
 interface Filter {
@@ -178,43 +180,50 @@ export class EmbeddingIndex {
     const topK = options.topK || DEFAULT_TOP_K;
     const filter = options.filter || {};
     const useStorage = options.useStorage || 'none';
-
+  
     if (useStorage === 'indexedDB') {
       const DBname = options.storageOptions?.indexedDBName || 'clientVectorDB';
       const objectStoreName =
         options.storageOptions?.indexedDBObjectStoreName ||
         'ClientEmbeddingStore';
-
+  
       if (typeof indexedDB === 'undefined') {
         console.error('IndexedDB is not supported');
         throw new Error('IndexedDB is not supported');
       }
-      const results = await this.loadAndSearchFromIndexedDB(
+      
+      return await this.loadAndSearchFromIndexedDB(
         DBname,
         objectStoreName,
         queryEmbedding,
         topK,
         filter,
       );
-      return results;
     } else {
-      // Compute similarities
-      const similarities = this.objects
-        .filter((object) =>
-          Object.keys(filter).every((key) => object[key] === filter[key]),
-        )
-        .map((obj) => ({
-          similarity: cosineSimilarity(queryEmbedding, obj.embedding),
-          object: obj,
-        }));
-
-      // Sort by similarity and return topK results
-      return similarities
-        .sort((a, b) => b.similarity - a.similarity)
-        .slice(0, topK);
+      const queue = new FastPriorityQueue<SearchResult>((a, b) => a.similarity < b.similarity);
+  
+      for (const obj of this.objects) {
+        if (Object.keys(filter).every((key) => obj[key] === filter[key])) {
+          const similarity = cosineSimilarity(queryEmbedding, obj.embedding);
+  
+          if (queue.size < topK) {
+            queue.add({ similarity, object: obj });
+          } else if (queue.peek() && similarity > queue.peek()!.similarity) {
+            queue.poll(); // Remove lowest
+            queue.add({ similarity, object: obj });
+          }
+        }
+      }
+  
+      const results: SearchResult[] = [];
+      while (!queue.isEmpty()) {
+        results.push(queue.poll() as SearchResult);
+      }
+      results.reverse(); // Since it's a min-heap
+      return results;
     }
   }
-
+  
   printIndex() {
     console.log('Index Content:');
     this.objects.forEach((obj, idx) => {
@@ -270,18 +279,45 @@ export class EmbeddingIndex {
     topK: number,
     filter: { [key: string]: any },
   ): Promise<SearchResult[]> {
+    const startTime = performance.now();
     const db = await IndexedDbManager.create(DBname, objectStoreName);
+    const dbLoadTime = performance.now() - startTime;
+    
     const generator = db.dbGenerator();
-    const results: { similarity: number; object: any }[] = [];
-
+  
+    const queue = new FastPriorityQueue<SearchResult>((a, b) => a.similarity < b.similarity);
+    
+    let totalSimilarityTime = 0;
+    let recordCount = 0;
+  
     for await (const record of generator) {
       if (Object.keys(filter).every((key) => record[key] === filter[key])) {
+        const similarityStartTime = performance.now();
         const similarity = cosineSimilarity(queryEmbedding, record.embedding);
-        results.push({ similarity, object: record });
+        totalSimilarityTime += performance.now() - similarityStartTime;
+        recordCount++;
+  
+        if (queue.size < topK) {
+          queue.add({ similarity, object: record });
+        } else if (queue.peek() && similarity > queue.peek()!.similarity) {
+          queue.poll();
+          queue.add({ similarity, object: record });
+        }
       }
     }
-    results.sort((a, b) => b.similarity - a.similarity);
-    return results.slice(0, topK);
+  
+    const results: SearchResult[] = [];
+    while (!queue.isEmpty()) {
+      results.push(queue.poll() as SearchResult);
+    }
+    results.reverse();
+    
+    const totalTime = performance.now() - startTime;
+    console.log(`%cDB Loading Time: ${dbLoadTime.toFixed(2)}ms (${((dbLoadTime/totalTime)*100).toFixed(1)}% of total)`, 'color: red');
+    console.log(`%cSimilarity Calculations: ${totalSimilarityTime.toFixed(2)}ms (${((totalSimilarityTime/totalTime)*100).toFixed(1)}% of total) for ${recordCount} records`, 'color: red');
+    console.log(`%cTotal Processing Time: ${totalTime.toFixed(2)}ms`, 'color: red');
+    
+    return results;
   }
 
   async deleteIndexedDB(DBname: string = 'clientVectorDB'): Promise<void> {

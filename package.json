@@ -39,6 +39,7 @@
   "dependencies": {
     "@msgpack/msgpack": "^3.0.0-beta2",
     "@xenova/transformers": "^2.5.2",
+    "fastpriorityqueue": "^0.7.5",
     "lru-cache": "^10.0.1"
   }
 }
