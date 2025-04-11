@@ -1,5 +1,5 @@
 ---
-"client-vector-search": patch
+'client-vector-search': patch
 ---
 
 creates a proper embedding index

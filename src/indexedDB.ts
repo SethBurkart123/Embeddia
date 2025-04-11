@@ -156,6 +156,7 @@ export class IndexedDbManager {
       console.error('An error occurred:', error);
     }
   }
+
   async deleteIndexedDBObjectStoreFromDB(
     DBname: string,
     objectStoreName: string,
