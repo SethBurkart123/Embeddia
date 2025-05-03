@@ -24,7 +24,7 @@ It outperforms OpenAI's `text-embedding-ada-002` in real-world use cases and is 
 ## Installation
 
 ```bash
-npm i Embeddia
+npm i embeddia
 ```
 
 ## Quickstart
@@ -32,7 +32,7 @@ npm i Embeddia
 This library provides a plug-and-play solution for embedding and vector search. It's designed to be easy to use, efficient, and versatile. Here's a quick start guide:
 
 ```ts
-import { getEmbedding, EmbeddingIndex } from 'Embeddia';
+import { getEmbedding, EmbeddingIndex } from 'embeddia';
 
 // getEmbedding is an async function, so you need to use 'await' or '.then()' to get the result
 const embedding = await getEmbedding('Apple'); // Returns embedding as number[]
@@ -93,7 +93,7 @@ module.exports = {
 You can initialize the model before using it to generate embeddings. This will ensure that the model is loaded before you use it and provide a better UX.
 
 ```js
-import { initializeModel } from "Embeddia"
+import { initializeModel } from "embeddia"
 ...
   useEffect(() => {
     try {
@@ -224,8 +224,8 @@ Save the index to a persistent IndexedDB database. Note
 
 ```ts
 await index.saveIndex('indexedDB', {
-  DBName: 'clientVectorDB',
-  objectStoreName: 'ClientEmbeddingStore',
+  DBName: 'embeddiaDB',
+  objectStoreName: 'embeddiaObjectStore',
 });
 ```
 
@@ -240,8 +240,8 @@ const results = await index.search(queryEmbedding, {
   topK: 5,
   useStorage: "indexedDB",
   storageOptions: { // only if you want to override the default options, defaults are below
-    indexedDBName: 'clientVectorDB',
-    indexedDBObjectStoreName: 'ClientEmbeddingStore'
+    indexedDBName: 'embeddiaDB',
+    indexedDBObjectStoreName: 'embeddiaObjectStore'
   }
 });
 
@@ -251,7 +251,7 @@ const results = await index.search(queryEmbedding, {
 To delete an entire database.
 
 ```ts
-await IndexedDbManager.deleteIndexedDB("clientVectorDB");
+await IndexedDbManager.deleteIndexedDB("embeddiaDB");
 ````
 
 ---
@@ -262,8 +262,8 @@ To delete an object store from a database.
 
 ```ts
 await IndexedDbManager.deleteIndexedDBObjectStore(
-  'clientVectorDB',
-  'ClientEmbeddingStore',
+  'embeddiaDB',
+  'embeddiaObjectStore',
 );
 ```
 
@@ -275,7 +275,7 @@ To retrieve all objects from a specific object store.
 
 ```ts
 const allObjects = await IndexedDbManager.getAllObjectsFromIndexedDB(
-  'clientVectorDB',
-  'ClientEmbeddingStore',
+  'embeddiaDB',
+  'embeddiaObjectStore',
 );
 ```

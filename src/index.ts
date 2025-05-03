@@ -121,8 +121,8 @@ export class EmbeddingIndex {
    * @param objectStoreName - The name of the object store.
    */
   public async preloadIndexedDB(
-    DBname: string = 'clientVectorDB',
-    objectStoreName: string = 'ClientEmbeddingStore',
+    DBname: string = 'embeddiaDB',
+    objectStoreName: string = 'embeddiaObjectStore',
   ): Promise<void> {
     console.log(`Preloading data from ${DBname}/${objectStoreName}...`);
     const preloadStartTime = performance.now();
