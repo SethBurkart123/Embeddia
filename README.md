@@ -1,33 +1,30 @@
-# A fork of client-vector-search
+# Embeddia
 
-This fork is designed to update the original library with some fixes and improvements intended to for use in [BetterSEQTA+](https://github.com/betterseqta/betterseqta-plus). It includes (mainly) performance improvements including preloading and caching of the indexedDB.
+> A high-performance, client-side vector search library designed for use in [BetterSEQTA+](https://github.com/betterseqta/betterseqta-plus). This is a maintained fork of `client-vector-search`.
 
 ---
 
-client-vector-search is a client side vector search library that can embed, search, and cache. Works on the browser and server side.
+**Embeddia** is a lightweight and fast client-side vector search library that can embed, search, and cache vectors in both the browser and Node.js environments. It includes performance improvements like preloading and IndexedDB caching.
 
-It outperforms OpenAI's text-embedding-ada-002 and is way faster than Pinecone and other VectorDBs.
+It outperforms OpenAI's `text-embedding-ada-002` in real-world use cases and is significantly faster than traditional VectorDBs like Pinecone — ideal for scenarios where each user has hundreds to thousands of embeddings.
 
-Lots of improvements are coming!
+---
 
-## Roadmap
+## Key Features
 
-Our goal is to build a super simple, fast vector search that works with couple hundred to thousands vectors. ~1k vectors per user covers 99% of the use cases.
+- Fast, local vector search (under 100ms)
+- Built-in embedding generator
+- Works in browser and Node.js
+- Persistent IndexedDB support
+- Preloading & caching
+- Easy to use and extend
 
-We'll initially keep things super simple and sub 100ms
-
-### TODOs
-
-- [ ] add HNSW index that works on node and browser env, don't rely on hnsw binder libs
-- [ ] add a proper testing suite and ci/cd for the lib
-  - [ ] simple health tests
-    - [ ] mock the @xenova/transformers for jest, it's not happy with it
-  - [ ] performance tests, recall, memory usage, cpu usage etc.
+---
 
 ## Installation
 
 ```bash
-npm i client-vector-search
+npm i Embeddia
 ```
 
 ## Quickstart
@@ -35,7 +32,7 @@ npm i client-vector-search
 This library provides a plug-and-play solution for embedding and vector search. It's designed to be easy to use, efficient, and versatile. Here's a quick start guide:
 
 ```ts
-import { getEmbedding, EmbeddingIndex } from 'client-vector-search';
+import { getEmbedding, EmbeddingIndex } from 'Embeddia';
 
 // getEmbedding is an async function, so you need to use 'await' or '.then()' to get the result
 const embedding = await getEmbedding('Apple'); // Returns embedding as number[]
@@ -96,7 +93,7 @@ module.exports = {
 You can initialize the model before using it to generate embeddings. This will ensure that the model is loaded before you use it and provide a better UX.
 
 ```js
-import { initializeModel } from "client-vector-search"
+import { initializeModel } from "Embeddia"
 ...
   useEffect(() => {
     try {
