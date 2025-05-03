@@ -2,6 +2,7 @@ node_modules
 test.js
 mock/
 .DS_Store
+dist/
 .pytest_cache/
 test*/
 
