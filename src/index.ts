@@ -34,6 +34,7 @@ interface SearchOptions {
   useStorage?: StorageOptions;
   storageOptions?: { indexedDBName: string; indexedDBObjectStoreName: string }; // TODO: generalize it to localStorage as well
   dedupeEntries?: boolean;
+  debug?: boolean;
 }
 
 const cacheInstance = Cache.getInstance();
@@ -299,10 +300,11 @@ export class EmbeddingIndex {
       topK: 3,
       useStorage: 'none',
       storageOptions: {
-        indexedDBName: 'clientVectorDB',
-        indexedDBObjectStoreName: 'ClientEmbeddingStore',
+        indexedDBName: 'embeddiaDB',
+        indexedDBObjectStoreName: 'embeddiaObjectStore',
       },
       dedupeEntries: false,
+      debug: false,
     },
   ): Promise<SearchResult[]> {
     const topK = options.topK || DEFAULT_TOP_K;
@@ -310,10 +312,10 @@ export class EmbeddingIndex {
     const useStorage = options.useStorage || 'none';
 
     if (useStorage === 'indexedDB') {
-      const DBname = options.storageOptions?.indexedDBName || 'clientVectorDB';
+      const DBname = options.storageOptions?.indexedDBName || 'embeddiaDB';
       const objectStoreName =
         options.storageOptions?.indexedDBObjectStoreName ||
-        'ClientEmbeddingStore';
+        'embeddiaObjectStore';
 
       if (typeof indexedDB === 'undefined') {
         console.error('IndexedDB is not supported');
@@ -327,6 +329,7 @@ export class EmbeddingIndex {
         topK,
         options.dedupeEntries || false,
         filter,
+        options.debug || false,
       );
     } else {
       return await this.performCompareSearch(
@@ -349,8 +352,8 @@ export class EmbeddingIndex {
   async saveIndex(
     storageType: string,
     options: { DBName: string; objectStoreName: string } = {
-      DBName: 'clientVectorDB',
-      objectStoreName: 'ClientEmbeddingStore',
+      DBName: 'embeddiaDB',
+      objectStoreName: 'embeddiaObjectStore',
     },
   ) {
     if (storageType === 'indexedDB') {
@@ -363,8 +366,8 @@ export class EmbeddingIndex {
   }
 
   async saveToIndexedDB(
-    DBname: string = 'clientVectorDB',
-    objectStoreName: string = 'ClientEmbeddingStore',
+    DBname: string = 'embeddiaDB',
+    objectStoreName: string = 'embeddiaObjectStore',
   ): Promise<void> {
     if (typeof indexedDB === 'undefined') {
       console.error('IndexedDB is not defined');
@@ -388,12 +391,13 @@ export class EmbeddingIndex {
   }
 
   async loadAndSearchFromIndexedDB(
-    DBname: string = 'clientVectorDB',
-    objectStoreName: string = 'ClientEmbeddingStore',
+    DBname: string = 'embeddiaDB',
+    objectStoreName: string = 'embeddiaObjectStore',
     queryEmbedding: number[],
     topK: number,
     dedupeEntries: boolean,
     filter: Filter,
+    debug: boolean = false,
   ): Promise<SearchResult[]> {
     const functionStartTime = performance.now();
     let objectsToSearch: any[] = [];
@@ -404,9 +408,11 @@ export class EmbeddingIndex {
       this.preloadedObjectStoreName === objectStoreName;
 
     if (!isCacheValid) {
-      console.log(
-        `Cache invalid or missing for ${DBname}/${objectStoreName}. Preloading...`,
-      );
+      if (debug) {
+        console.log(
+          `Cache invalid or missing for ${DBname}/${objectStoreName}. Preloading...`,
+        );
+      }
       try {
         // Call the existing preload function. It handles fetching AND updating the cache variables.
         await this.preloadIndexedDB(DBname, objectStoreName);
@@ -424,7 +430,9 @@ export class EmbeddingIndex {
         return []; // Return empty results if preload fails
       }
     } else {
-      console.log(`Using preloaded cache for ${DBname}/${objectStoreName}.`);
+      if (debug) {
+        console.log(`Using preloaded cache for ${DBname}/${objectStoreName}.`);
+      }
       // Cache is valid, use it directly
       objectsToSearch = this.indexedDBDataCache!; // Use non-null assertion as isCacheValid checked it
     }
@@ -532,7 +540,7 @@ export class EmbeddingIndex {
     return results.reverse();
   }
 
-  async deleteIndexedDB(DBname: string = 'clientVectorDB'): Promise<void> {
+  async deleteIndexedDB(DBname: string = 'embeddiaDB'): Promise<void> {
     if (typeof indexedDB === 'undefined') {
       console.error('IndexedDB is not defined');
       throw new Error('IndexedDB is not supported');
@@ -552,8 +560,8 @@ export class EmbeddingIndex {
   }
 
   async deleteIndexedDBObjectStore(
-    DBname: string = 'clientVectorDB',
-    objectStoreName: string = 'ClientEmbeddingStore',
+    DBname: string = 'embeddiaDB',
+    objectStoreName: string = 'embeddiaObjectStore',
   ): Promise<void> {
     const db = await IndexedDbManager.create(DBname, objectStoreName);
 
@@ -569,8 +577,8 @@ export class EmbeddingIndex {
   }
 
   async getAllObjectsFromIndexedDB(
-    DBname: string = 'clientVectorDB',
-    objectStoreName: string = 'ClientEmbeddingStore',
+    DBname: string = 'embeddiaDB',
+    objectStoreName: string = 'embeddiaObjectStore',
   ): Promise<any[]> {
     const db = await IndexedDbManager.create(DBname, objectStoreName);
     const objects: any[] = [];

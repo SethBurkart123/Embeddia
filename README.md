@@ -57,8 +57,8 @@ const results = await index.search([1, 2, 3], {
   topK: 5,
   useStorage: 'indexedDB',
   // storageOptions: { // use only if you overrode the defaults
-  //   indexedDBName: 'clientVectorDB',
-  //   indexedDBObjectStoreName: 'ClientEmbeddingStore',
+  //   indexedDBName: 'embeddiaDB',
+  //   indexedDBObjectStoreName: 'embeddiaObjectStore',
   // },
 });
 

@@ -12,8 +12,8 @@ export class IndexedDbManager {
   }
 
   static async create(
-    DBname: string = 'clientVectorDB',
-    objectStoreName: string = 'ClientEmbeddingStore',
+    DBname: string = 'embeddiaDB',
+    objectStoreName: string = 'embeddiaObjectStore',
     index: string | null = null,
   ): Promise<IndexedDbManager> {
     const instance = new IndexedDbManager(DBname, objectStoreName);
