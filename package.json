@@ -1,7 +1,7 @@
 {
-  "name": "client-vector-search",
-  "version": "0.2.0",
-  "description": "A client side vector search library",
+  "name": "embeddia",
+  "version": "1.0.0",
+  "description": "A fast, client-side vector search and embedding library.",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -16,7 +16,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yusufhilmi/client-vector-search.git"
+    "url": "git+https://github.com/sethburkart123/Embeddia.git"
   },
   "keywords": [
     "vector",
@@ -25,12 +25,12 @@
     "nlp",
     "models"
   ],
-  "author": "yusufhilmi",
+  "author": "Embeddia",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/yusufhilmi/client-vector-search/issues"
+    "url": "https://github.com/sethburkart123/Embeddia/issues"
   },
-  "homepage": "https://github.com/yusufhilmi/client-vector-search#readme",
+  "homepage": "https://github.com/sethburkart123/Embeddia#readme",
   "devDependencies": {
     "@changesets/cli": "^2.26.2",
     "fake-indexeddb": "^4.0.2",
