@@ -33,6 +33,7 @@ interface SearchOptions {
   filter?: Filter;
   useStorage?: StorageOptions;
   storageOptions?: { indexedDBName: string; indexedDBObjectStoreName: string }; // TODO: generalize it to localStorage as well
+  dedupeEntries?: boolean;
 }
 
 const cacheInstance = Cache.getInstance();
@@ -42,11 +43,12 @@ let currentModel: string;
 
 export const initializeModel = async (
   model: string = 'Xenova/gte-small',
+  pipeline_str: string = 'feature-extraction',
 ): Promise<void> => {
   if (model !== currentModel) {
     const transformersModule = await import('@xenova/transformers');
     const pipeline = transformersModule.pipeline;
-    pipe = await pipeline('feature-extraction', model);
+    pipe = await pipeline(pipeline_str, model);
     currentModel = model;
   }
 };
@@ -66,7 +68,13 @@ export const getEmbedding = async (
     await initializeModel(model);
   }
 
+  const functionStartTime = performance.now();
   const output = await pipe(text, options);
+  const totalFunctionTime = performance.now() - functionStartTime;
+  console.log(
+    `%cTotal Embedding Function Time: ${totalFunctionTime.toFixed(2)}ms`,
+    'color: red;',
+  );
   const roundedOutput = Array.from(output.data as number[]).map(
     (value: number) => parseFloat(value.toFixed(precision)),
   );
@@ -126,19 +134,28 @@ export class EmbeddingIndex {
       const fetchedObjects = await new Promise<any[]>((resolve, reject) => {
         const request = indexedDB.open(DBname);
 
-        request.onerror = (event) => {
-          console.error('Failed to open database for preloading:', event);
-          reject(new Error('Failed to open database for preloading'));
+        request.onerror = async () => {
+          console.log('Database not found, attempting to create it...');
+          try {
+            await IndexedDbManager.create(DBname, objectStoreName);
+            resolve([]); // Return empty array for new database
+          } catch (createError) {
+            console.error('Failed to create database:', createError);
+            reject(new Error('Failed to create database'));
+          }
         };
 
         request.onsuccess = (event) => {
           const db = (event.target as IDBOpenDBRequest).result;
           if (!db.objectStoreNames.contains(objectStoreName)) {
             db.close();
-            console.error(
-              `Object store '${objectStoreName}' not found during preload.`,
-            );
-            reject(new Error(`Object store '${objectStoreName}' not found.`));
+            console.log('Object store not found, creating it...');
+            IndexedDbManager.create(DBname, objectStoreName)
+              .then(() => resolve([]))
+              .catch((error) => {
+                console.error(`Object store creation failed: ${error}`);
+                reject(new Error(`Object store creation failed: ${error}`));
+              });
             return;
           }
           const transaction = db.transaction([objectStoreName], 'readonly');
@@ -182,8 +199,6 @@ export class EmbeddingIndex {
     } catch (error) {
       console.error('Error during IndexedDB preload:', error);
       this.clearIndexedDBCache(); // Clear potentially partial cache on error
-      // Optionally re-throw or handle as needed
-      // throw error;
     }
   }
 
@@ -287,6 +302,7 @@ export class EmbeddingIndex {
         indexedDBName: 'clientVectorDB',
         indexedDBObjectStoreName: 'ClientEmbeddingStore',
       },
+      dedupeEntries: false,
     },
   ): Promise<SearchResult[]> {
     const topK = options.topK || DEFAULT_TOP_K;
@@ -309,32 +325,17 @@ export class EmbeddingIndex {
         objectStoreName,
         queryEmbedding,
         topK,
+        options.dedupeEntries || false,
         filter,
       );
     } else {
-      const queue = new FastPriorityQueue<SearchResult>(
-        (a, b) => a.similarity < b.similarity,
+      return await this.performCompareSearch(
+        options.dedupeEntries || false,
+        filter,
+        this.objects,
+        queryEmbedding,
+        topK,
       );
-
-      for (const obj of this.objects) {
-        if (Object.keys(filter).every((key) => obj[key] === filter[key])) {
-          const similarity = cosineSimilarity(queryEmbedding, obj.embedding);
-
-          if (queue.size < topK) {
-            queue.add({ similarity, object: obj });
-          } else if (queue.peek() && similarity > queue.peek()!.similarity) {
-            queue.poll(); // Remove lowest
-            queue.add({ similarity, object: obj });
-          }
-        }
-      }
-
-      const results: SearchResult[] = [];
-      while (!queue.isEmpty()) {
-        results.push(queue.poll() as SearchResult);
-      }
-      results.reverse(); // Since it's a min-heap
-      return results;
     }
   }
 
@@ -391,6 +392,7 @@ export class EmbeddingIndex {
     objectStoreName: string = 'ClientEmbeddingStore',
     queryEmbedding: number[],
     topK: number,
+    dedupeEntries: boolean,
     filter: Filter,
   ): Promise<SearchResult[]> {
     const functionStartTime = performance.now();
@@ -427,34 +429,97 @@ export class EmbeddingIndex {
       objectsToSearch = this.indexedDBDataCache!; // Use non-null assertion as isCacheValid checked it
     }
 
+    const results = await this.performCompareSearch(
+      dedupeEntries,
+      filter,
+      objectsToSearch,
+      queryEmbedding,
+      topK,
+    );
+
+    const totalFunctionTime = performance.now() - functionStartTime;
+    console.log(
+      `%cTotal Search Function Time: ${totalFunctionTime.toFixed(2)}ms`,
+      'color: green;',
+    );
+
+    return results;
+  }
+
+  async performCompareSearch(
+    dedupeEntries: boolean,
+    filter: Filter,
+    objectsToSearch: any[],
+    queryEmbedding: number[],
+    topK: number,
+  ): Promise<SearchResult[]> {
     const queue = new FastPriorityQueue<SearchResult>(
       (a, b) => a.similarity < b.similarity,
     );
 
     // Perform search on the determined objectsToSearch (either from cache or fresh preload)
-    for (const record of objectsToSearch) {
-      // 1. Filter Check
-      const passesFilter = Object.keys(filter).every(
-        (key) => record[key] === filter[key],
-      );
+    if (dedupeEntries) {
+      const seenMap: Map<string, SearchResult> = new Map();
 
-      if (passesFilter) {
-        // Ensure record.embedding exists and is an array
+      for (const record of objectsToSearch) {
+        const passesFilter = Object.keys(filter).every(
+          (key) => record[key] === filter[key],
+        );
+
+        if (!passesFilter) continue;
+
         const embedding = record?.embedding;
         if (!Array.isArray(embedding)) {
           console.warn('Record missing or has invalid embedding:', record);
-          continue; // Skip this record
+          continue;
         }
-        const similarity = cosineSimilarity(queryEmbedding, embedding);
 
-        // 3. Queue Operations
+        const similarity = cosineSimilarity(queryEmbedding, embedding);
+        const id = record.id ?? JSON.stringify(record); // Use 'id' or fallback to a stringified version of the record
+
+        const existing = seenMap.get(id);
+        if (!existing || similarity > existing.similarity) {
+          seenMap.set(id, { similarity, object: record });
+        }
+      }
+
+      // Now that we have the best one per ID, put the topK into the priority queue
+      for (const result of seenMap.values()) {
         if (queue.size < topK) {
-          queue.add({ similarity, object: record });
+          queue.add(result);
         } else {
           const peeked = queue.peek();
-          if (peeked && similarity > peeked.similarity) {
+          if (peeked && result.similarity > peeked.similarity) {
             queue.poll();
+            queue.add(result);
+          }
+        }
+      }
+    } else {
+      for (const record of objectsToSearch) {
+        // 1. Filter Check
+        const passesFilter = Object.keys(filter).every(
+          (key) => record[key] === filter[key],
+        );
+
+        if (passesFilter) {
+          // Ensure record.embedding exists and is an array
+          const embedding = record?.embedding;
+          if (!Array.isArray(embedding)) {
+            console.warn('Record missing or has invalid embedding:', record);
+            continue; // Skip this record
+          }
+          const similarity = cosineSimilarity(queryEmbedding, embedding);
+
+          // 3. Queue Operations
+          if (queue.size < topK) {
             queue.add({ similarity, object: record });
+          } else {
+            const peeked = queue.peek();
+            if (peeked && similarity > peeked.similarity) {
+              queue.poll();
+              queue.add({ similarity, object: record });
+            }
           }
         }
       }
@@ -463,12 +528,6 @@ export class EmbeddingIndex {
     while (!queue.isEmpty()) {
       results.push(queue.poll()!);
     }
-
-    const totalFunctionTime = performance.now() - functionStartTime;
-    console.log(
-      `%cTotal Search Function Time: ${totalFunctionTime.toFixed(2)}ms`,
-      'color: green;',
-    );
 
     return results.reverse();
   }
