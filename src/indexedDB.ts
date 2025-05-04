@@ -2,6 +2,15 @@
 // import { IDBFactory } from 'fake-indexeddb';
 // const indexedDB = new IDBFactory();
 
+export interface StoreOptions {
+  /** field to use as keyPath, omit for auto‑inc behaviour */
+  primaryKey?: string;
+  /** autoIncrement flag if you want both keyPath *and* a counter */
+  autoIncrement?: boolean;
+  /** additional secondary indices to create (unique = false) */
+  indices?: string[];
+}
+
 export class IndexedDbManager {
   private DBname!: string;
   private objectStoreName!: string;
@@ -11,26 +20,38 @@ export class IndexedDbManager {
     this.objectStoreName = objectStoreName;
   }
 
+  /**
+   * @param DBname            database name
+   * @param objectStoreName   store / table name
+   * @param opts              optional schema options (see type below)
+   */
   static async create(
     DBname: string = 'embeddiaDB',
     objectStoreName: string = 'embeddiaObjectStore',
-    index: string | null = null,
+    opts: StoreOptions = {},
   ): Promise<IndexedDbManager> {
+
     const instance = new IndexedDbManager(DBname, objectStoreName);
+
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(DBname);
-      let db: IDBDatabase;
 
-      request.onerror = (event) => {
-        console.error('IndexedDB error:', event);
+      request.onerror = (ev) => {
+        console.error('IndexedDB error:', ev);
         reject(new Error('Database initialization failed'));
       };
 
       request.onsuccess = async () => {
-        db = request.result;
+        const db = request.result;
+
+        // create object store lazily if it does not exist
         if (!db.objectStoreNames.contains(objectStoreName)) {
           db.close();
-          await instance.createObjectStore(index);
+          try {
+            await instance.createObjectStore(opts);
+          } catch (e) {
+            return reject(e);
+          }
         }
         db.close();
         resolve(instance);
@@ -38,43 +59,63 @@ export class IndexedDbManager {
     });
   }
 
-  async createObjectStore(index: string | null = null): Promise<void> {
+  async createObjectStore(opts: StoreOptions = {}): Promise<void> {
+    const { primaryKey, autoIncrement, indices = [] } = opts;
+  
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(this.DBname);
-      request.onsuccess = () => {
-        let db1 = request.result;
-        var version = db1.version;
-        db1.close();
-        const request_2 = indexedDB.open(this.DBname, version + 1);
-        request_2.onupgradeneeded = async () => {
-          let db2 = request_2.result;
-          if (!db2.objectStoreNames.contains(this.objectStoreName)) {
-            const objectStore = db2.createObjectStore(this.objectStoreName, {
-              autoIncrement: true,
+      // open once to read the current version
+      const first = indexedDB.open(this.DBname);
+      first.onerror = (ev) => {
+        console.error('Error opening database:', ev);
+        reject(new Error('Error opening database'));
+      };
+  
+      first.onsuccess = () => {
+        const oldDB = first.result;
+        const nextVersion = oldDB.version + 1;
+        oldDB.close();
+  
+        const upgrade = indexedDB.open(this.DBname, nextVersion);
+  
+        upgrade.onupgradeneeded = () => {
+          const db = upgrade.result;
+  
+          if (!db.objectStoreNames.contains(this.objectStoreName)) {
+            // keep default when no primaryKey passed
+            const store = db.createObjectStore(this.objectStoreName, {
+              keyPath: primaryKey ?? undefined,
+              autoIncrement:
+                primaryKey === undefined ? true : !!autoIncrement,
             });
-            if (index) {
-              objectStore.createIndex(`by_${index}`, index, { unique: false });
+  
+            // optional extra indices
+            for (const idx of indices) {
+              if (!store.indexNames.contains(`by_${idx}`)) {
+                store.createIndex(`by_${idx}`, idx, { unique: false });
+              }
             }
           }
         };
-        request_2.onsuccess = async () => {
-          let db2 = request_2.result;
-          console.log('Object store creation successful');
-          db2.close();
+  
+        upgrade.onsuccess = () => {
+          upgrade.result.close();
+          console.log(
+            `Object store '${this.objectStoreName}' created/updated `,
+            `(primaryKey: ${primaryKey ?? 'none'}, autoInc: ${
+              primaryKey ? !!autoIncrement : true
+            })`,
+          );
           resolve();
         };
-        request_2.onerror = (event) => {
-          console.error('Error creating object store:', event);
+  
+        upgrade.onerror = (ev) => {
+          console.error('Error creating object store:', ev);
           reject(new Error('Error creating object store'));
         };
       };
-      request.onerror = (event) => {
-        console.error('Error opening database:', event);
-        reject(new Error('Error opening database'));
-      };
     });
   }
-
+  
   async addToIndexedDB(
     objs: { [key: string]: any }[] | { [key: string]: any },
   ): Promise<void> {
@@ -91,7 +132,7 @@ export class IndexedDbManager {
         }
 
         objs.forEach((obj: { [key: string]: any }) => {
-          const request = objectStore.add(obj);
+          const request = objectStore.put(obj);
 
           request.onerror = (event) => {
             console.error('Failed to add object', event);

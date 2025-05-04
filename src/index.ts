@@ -7,7 +7,7 @@ interface Filter {
 }
 
 import Cache from './cache';
-import { IndexedDbManager } from './indexedDB';
+import { IndexedDbManager, StoreOptions } from './indexedDB';
 import { cosineSimilarity } from './utils';
 export { ExperimentalHNSWIndex } from './hnsw';
 
@@ -124,6 +124,7 @@ export class EmbeddingIndex {
   public async preloadIndexedDB(
     DBname: string = 'embeddiaDB',
     objectStoreName: string = 'embeddiaObjectStore',
+    opts: StoreOptions = {},
   ): Promise<void> {
     console.log(`Preloading data from ${DBname}/${objectStoreName}...`);
     const preloadStartTime = performance.now();
@@ -138,7 +139,7 @@ export class EmbeddingIndex {
         request.onerror = async () => {
           console.log('Database not found, attempting to create it...');
           try {
-            await IndexedDbManager.create(DBname, objectStoreName);
+            await IndexedDbManager.create(DBname, objectStoreName, opts);
             resolve([]); // Return empty array for new database
           } catch (createError) {
             console.error('Failed to create database:', createError);
@@ -151,7 +152,7 @@ export class EmbeddingIndex {
           if (!db.objectStoreNames.contains(objectStoreName)) {
             db.close();
             console.log('Object store not found, creating it...');
-            IndexedDbManager.create(DBname, objectStoreName)
+            IndexedDbManager.create(DBname, objectStoreName, opts)
               .then(() => resolve([]))
               .catch((error) => {
                 console.error(`Object store creation failed: ${error}`);
