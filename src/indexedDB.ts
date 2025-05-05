@@ -99,12 +99,6 @@ export class IndexedDbManager {
   
         upgrade.onsuccess = () => {
           upgrade.result.close();
-          console.log(
-            `Object store '${this.objectStoreName}' created/updated `,
-            `(primaryKey: ${primaryKey ?? 'none'}, autoInc: ${
-              primaryKey ? !!autoIncrement : true
-            })`,
-          );
           resolve();
         };
   
@@ -227,7 +221,6 @@ export class IndexedDbManager {
         };
         request_2.onsuccess = () => {
           let db2 = request_2.result;
-          console.log('Object store deletion successful');
           db2.close();
           resolve();
         };

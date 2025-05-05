@@ -42,6 +42,8 @@ const cacheInstance = Cache.getInstance();
 let pipe: any;
 let currentModel: string;
 
+export { IndexedDbManager, StoreOptions };
+
 export const initializeModel = async (
   model: string = 'Xenova/gte-small',
   pipeline_str: string = 'feature-extraction',
@@ -69,13 +71,7 @@ export const getEmbedding = async (
     await initializeModel(model);
   }
 
-  const functionStartTime = performance.now();
   const output = await pipe(text, options);
-  const totalFunctionTime = performance.now() - functionStartTime;
-  console.log(
-    `%cTotal Embedding Function Time: ${totalFunctionTime.toFixed(2)}ms`,
-    'color: red;',
-  );
   const roundedOutput = Array.from(output.data as number[]).map(
     (value: number) => parseFloat(value.toFixed(precision)),
   );
@@ -126,9 +122,6 @@ export class EmbeddingIndex {
     objectStoreName: string = 'embeddiaObjectStore',
     opts: StoreOptions = {},
   ): Promise<void> {
-    console.log(`Preloading data from ${DBname}/${objectStoreName}...`);
-    const preloadStartTime = performance.now();
-
     // Clear any existing cache before preloading new data
     this.clearIndexedDBCache();
 
@@ -137,12 +130,10 @@ export class EmbeddingIndex {
         const request = indexedDB.open(DBname);
 
         request.onerror = async () => {
-          console.log('Database not found, attempting to create it...');
           try {
             await IndexedDbManager.create(DBname, objectStoreName, opts);
             resolve([]); // Return empty array for new database
           } catch (createError) {
-            console.error('Failed to create database:', createError);
             reject(new Error('Failed to create database'));
           }
         };
@@ -151,7 +142,6 @@ export class EmbeddingIndex {
           const db = (event.target as IDBOpenDBRequest).result;
           if (!db.objectStoreNames.contains(objectStoreName)) {
             db.close();
-            console.log('Object store not found, creating it...');
             IndexedDbManager.create(DBname, objectStoreName, opts)
               .then(() => resolve([]))
               .catch((error) => {
@@ -188,16 +178,6 @@ export class EmbeddingIndex {
       this.indexedDBDataCache = fetchedObjects;
       this.preloadedDBName = DBname;
       this.preloadedObjectStoreName = objectStoreName;
-
-      const preloadEndTime = performance.now();
-      console.log(
-        `%cSuccessfully preloaded ${
-          fetchedObjects.length
-        } objects from ${DBname}/${objectStoreName} in ${(
-          preloadEndTime - preloadStartTime
-        ).toFixed(2)}ms.`,
-        'color: green;',
-      );
     } catch (error) {
       console.error('Error during IndexedDB preload:', error);
       this.clearIndexedDBCache(); // Clear potentially partial cache on error
@@ -210,9 +190,6 @@ export class EmbeddingIndex {
    */
   clearIndexedDBCache(): void {
     if (this.indexedDBDataCache) {
-      console.log(
-        `Clearing preloaded cache for ${this.preloadedDBName}/${this.preloadedObjectStoreName}.`,
-      );
       this.indexedDBDataCache = null;
       this.preloadedDBName = null;
       this.preloadedObjectStoreName = null;
@@ -343,13 +320,6 @@ export class EmbeddingIndex {
     }
   }
 
-  printIndex() {
-    console.log('Index Content:');
-    this.objects.forEach((obj, idx) => {
-      console.log(`Item ${idx + 1}:`, obj);
-    });
-  }
-
   async saveIndex(
     storageType: string,
     options: { DBName: string; objectStoreName: string } = {
@@ -382,9 +352,6 @@ export class EmbeddingIndex {
     try {
       const db = await IndexedDbManager.create(DBname, objectStoreName);
       await db.addToIndexedDB(this.objects);
-      console.log(
-        `Index saved to database '${DBname}' object store '${objectStoreName}'`,
-      );
     } catch (error) {
       console.error('Error saving index to database:', error);
       throw new Error('Error saving index to database');
@@ -400,7 +367,6 @@ export class EmbeddingIndex {
     filter: Filter,
     debug: boolean = false,
   ): Promise<SearchResult[]> {
-    const functionStartTime = performance.now();
     let objectsToSearch: any[] = [];
 
     const isCacheValid =
@@ -444,12 +410,6 @@ export class EmbeddingIndex {
       objectsToSearch,
       queryEmbedding,
       topK,
-    );
-
-    const totalFunctionTime = performance.now() - functionStartTime;
-    console.log(
-      `%cTotal Search Function Time: ${totalFunctionTime.toFixed(2)}ms`,
-      'color: green;',
     );
 
     return results;
@@ -550,7 +510,6 @@ export class EmbeddingIndex {
       const request = indexedDB.deleteDatabase(DBname);
 
       request.onsuccess = () => {
-        console.log(`Database '${DBname}' deleted`);
         resolve();
       };
       request.onerror = (event) => {
@@ -568,9 +527,6 @@ export class EmbeddingIndex {
 
     try {
       await db.deleteIndexedDBObjectStoreFromDB(DBname, objectStoreName);
-      console.log(
-        `Object store '${objectStoreName}' deleted from database '${DBname}'`,
-      );
     } catch (error) {
       console.error('Error deleting object store:', error);
       throw new Error('Error deleting object store');
@@ -580,8 +536,9 @@ export class EmbeddingIndex {
   async getAllObjectsFromIndexedDB(
     DBname: string = 'embeddiaDB',
     objectStoreName: string = 'embeddiaObjectStore',
+    opts: StoreOptions = {},
   ): Promise<any[]> {
-    const db = await IndexedDbManager.create(DBname, objectStoreName);
+    const db = await IndexedDbManager.create(DBname, objectStoreName, opts);
     const objects: any[] = [];
     for await (const record of db.dbGenerator()) {
       objects.push(record);
