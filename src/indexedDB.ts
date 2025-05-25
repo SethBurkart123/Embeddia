@@ -147,6 +147,24 @@ export class IndexedDbManager {
     });
   }
 
+  async clearObjectStore(
+    DBname: string,
+    objectStoreName: string,
+  ): Promise<void> {
+    return new Promise(async (resolve, reject) => {
+      const request = indexedDB.open(DBname);
+      request.onsuccess = async () => {
+        let db = request.result;
+        db.deleteObjectStore(objectStoreName);
+        resolve();
+      };
+      request.onerror = (event) => {
+        console.error('Failed to clear object store', event);
+        reject(new Error('Failed to clear object store'));
+      };
+    });
+  }
+
   async *dbGenerator(): AsyncGenerator<any, void, undefined> {
     const objectStoreName = this.objectStoreName;
     const dbOpenPromise = new Promise<IDBDatabase>((resolve, reject) => {

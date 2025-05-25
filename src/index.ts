@@ -339,6 +339,7 @@ export class EmbeddingIndex {
   async saveToIndexedDB(
     DBname: string = 'embeddiaDB',
     objectStoreName: string = 'embeddiaObjectStore',
+    clearFirst: boolean = true,
   ): Promise<void> {
     if (typeof indexedDB === 'undefined') {
       console.error('IndexedDB is not defined');
@@ -351,6 +352,9 @@ export class EmbeddingIndex {
 
     try {
       const db = await IndexedDbManager.create(DBname, objectStoreName);
+      if (clearFirst) {
+        await db.clearObjectStore(DBname, objectStoreName);
+      }
       await db.addToIndexedDB(this.objects);
     } catch (error) {
       console.error('Error saving index to database:', error);
