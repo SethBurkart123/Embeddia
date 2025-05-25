@@ -1,6 +1,6 @@
 {
   "name": "embeddia",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "A fast, client-side vector search and embedding library.",
   "main": "dist/index.js",
   "module": "dist/index.mjs",

@@ -151,16 +151,31 @@ export class IndexedDbManager {
     DBname: string,
     objectStoreName: string,
   ): Promise<void> {
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
       const request = indexedDB.open(DBname);
-      request.onsuccess = async () => {
-        let db = request.result;
-        db.deleteObjectStore(objectStoreName);
-        resolve();
+      
+      request.onsuccess = () => {
+        const db = request.result;
+        const transaction = db.transaction([objectStoreName], 'readwrite');
+        const objectStore = transaction.objectStore(objectStoreName);
+        
+        const clearRequest = objectStore.clear();
+        
+        clearRequest.onsuccess = () => {
+          db.close();
+          resolve();
+        };
+        
+        clearRequest.onerror = (event) => {
+          console.error('Failed to clear object store contents', event);
+          db.close();
+          reject(new Error('Failed to clear object store contents'));
+        };
       };
+      
       request.onerror = (event) => {
-        console.error('Failed to clear object store', event);
-        reject(new Error('Failed to clear object store'));
+        console.error('Failed to open database', event);
+        reject(new Error('Failed to open database'));
       };
     });
   }
